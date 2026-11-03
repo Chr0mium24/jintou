@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>尽头 · 2026.11.1</title>
+<meta name="description" content="一张随手画的公路，走进去。">
+<link rel="icon" href="data:,">
+<style>
+  html, body { margin: 0; height: 100%; background: #fff; overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+  body.walking canvas { cursor: crosshair; }
+  body.paper canvas { cursor: pointer; }
+  #paper { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; }
+  #grain {
+    position: fixed; inset: 0; pointer-events: none; opacity: .07; mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .hint {
+    position: fixed; left: 0; right: 0; bottom: 2.6vh; padding-left: .4em;
+    text-align: center; pointer-events: none; user-select: none;
+    font: 300 12px/1.6 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif;
+    letter-spacing: .4em; color: rgba(30, 32, 48, .5);
+    opacity: 0; transition: opacity 1.2s ease, color 1.2s ease;
+  }
+  .hint.on { opacity: 1; }
+  @media (max-width: 560px) { .hint { letter-spacing: .15em; padding: 0 1em; } }
+  body.walking .hint { color: rgba(255, 255, 255, .62); }
+  .meter {
+    position: fixed; left: 16px; top: 13px; pointer-events: none; user-select: none;
+    font: 300 13px/1 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif;
+    letter-spacing: .3em; color: rgba(255, 255, 255, .72);
+    opacity: 0; transition: opacity .8s ease;
+  }
+  .meter.on { opacity: 1; }
+  #flash { position: fixed; inset: 0; background: #fffdf2; opacity: 0; pointer-events: none; }
+  .back {
+    position: fixed; right: 14px; top: 12px; padding: 8px 10px;
+    background: none; border: 0; cursor: pointer;
+    font: 300 12px/1 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif;
+    letter-spacing: .3em; color: rgba(255, 255, 255, .45);
+    opacity: 0; pointer-events: none; transition: opacity .8s ease, color .3s;
+  }
+  body.walking .back { opacity: 1; pointer-events: auto; }
+  .back:hover, .back:focus-visible { color: rgba(255, 255, 255, .9); outline: none; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body class="paper">
+<canvas id="c"></canvas>
+<!-- 画纸：原图像素坐标，中间挖掉画框，三维从洞里露出来 -->
+<svg id="paper" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <g id="pg">
+    <!-- 画框的洞；画纸本身由 main.js 用它拼出来（屏幕上一份，三维里一份） -->
+    <path id="hole" fill="none" stroke="none" d="M113,92 C400,80 700,70 984,62 Q997,61 997,76 L1001,300 L1004,560 L1006,992
+      C700,996 400,1000 150,1004 C142,800 135,650 128,560 C122,400 117,250 113,92Z"/>
+    <path id="sheet" fill="#fff" fill-rule="evenodd"/>
+    <path fill="#6a7bc1" d="M998,232 Q1018,236 1015,251 Q1007,263 999,258Z"/>
+    <g fill="none" stroke="#3e47a8" stroke-width="3" stroke-linecap="round">
+      <path d="M120,572 C126,650 129,760 146,985"/>
+      <path d="M1000,712 C1002,800 1003,900 1003,985"/>
+    </g>
+    <g fill="none" stroke="#141418" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3,590 Q2,580 9,577 C45,565 92,549 128,541"/>
+      <path d="M18,571 C56,558 96,546 131,537"/>
+      <path d="M130,376 L131,571"/>
+      <path d="M134,578 C138,700 143,850 150,1000"/>
+      <path d="M5,922 C62,905 122,890 187,876"/>
+      <path d="M172,1020 C250,1017 320,1014 380,1012"/>
+      <path d="M252,996 L259,1010"/>
+      <path d="M445,1001 C540,996 640,993 800,988"/>
+      <path d="M470,1006 L489,989 M492,999 Q502,1007 517,995"/>
+      <path d="M860,985 C950,978 1030,970 1088,966"/>
+      <path d="M996,150 C994,300 992,450 990,545"/>
+      <path d="M1001,560 C1003,700 1005,850 1004,990 C1003,1020 1001,1045 998,1072"/>
+      <path d="M885,548 C930,546 970,543 1012,541" stroke-width="5"/>
+      <path d="M990,463 C1010,459 1036,461 1050,472"/>
+      <path d="M992,478 C1004,476 1014,476 1022,476"/>
+    </g>
+  </g>
+</svg>
+<div id="grain"></div>
+<div id="flash"></div>
+<div class="hint" id="hint"></div>
+<div class="meter" id="meter"></div>
+<button class="back" id="back" type="button">回到画里 R</button>
+<noscript><div class="hint on">需要 JavaScript 和 WebGL</div></noscript>
+<script type="module" src="main.js?v=1"></script>
+</body>
+</html>
