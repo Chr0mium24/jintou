@@ -18,6 +18,18 @@ export function createIdol(ctx) {
   /* ── 小分身：本体的克隆，长两条简笔画的腿 ─────────────────── */
   const tpl = body.clone(true);
   for (const c of [...tpl.children]) if (c.geometry?.type === 'TorusGeometry') tpl.remove(c);
+  // 小分身只有几十厘米高：换低模，二十多个一起跑也不拖帧率
+  const lowCache = new Map();
+  tpl.traverse((o) => {
+    const g = o.geometry, pr = g?.parameters;
+    if (!pr) return;
+    const key = g.type + JSON.stringify(pr);
+    if (!lowCache.has(key)) {
+      lowCache.set(key, g.type === 'CapsuleGeometry' ? new THREE.CapsuleGeometry(pr.radius, pr.length, 2, 8)
+        : g.type === 'SphereGeometry' ? new THREE.SphereGeometry(pr.radius, 10, 7) : g);
+    }
+    o.geometry = lowCache.get(key);
+  });
   tpl.position.set(0, 0, 0); tpl.rotation.set(0, 0, 0); tpl.scale.set(1, 1, 1);
   const legMat = new THREE.MeshBasicMaterial({ color: '#141418' });
   const legGeo = new THREE.CylinderGeometry(0.11, 0.11, 2.4, 6).translate(0, -1.2, 0);
@@ -146,7 +158,7 @@ export function createIdol(ctx) {
   const EYES = rings.reduce((a, r) => a + r.userData.n, 0) + BODY_EYES.length;
   const eyeSeed = new Float32Array(EYES);
   for (let i = 0; i < EYES; i++) eyeSeed[i] = Math.random();
-  const eyeGeo = new THREE.SphereGeometry(1, 24, 16);
+  const eyeGeo = new THREE.SphereGeometry(1, 14, 10);
   eyeGeo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(eyeSeed, 1));
   const eyes = new THREE.InstancedMesh(eyeGeo, new THREE.ShaderMaterial({
     uniforms: { time: U.time },

@@ -1,11 +1,10 @@
-// 无头 Chrome 自测（预览面板隐藏时 rAF 会停）。用法: node tools/cdp.mjs <url> <w> <h> <脚本.js> <输出前缀>
-// 脚本里可用 ev(表达式) / shot(名字) / sleep(ms) / send(CDP 方法, 参数)
+// usage: node cdp.mjs <url> <w> <h> <script.js> <outprefix>
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 const [url, w, h, scriptPath, out] = process.argv.slice(2);
 const chrome = spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', [
   '--headless=new', '--remote-debugging-port=9333', `--window-size=${w},${h}`, '--user-data-dir=/tmp/jintou-cdp/prof',
-  '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--hide-scrollbars', 'about:blank'], { stdio: 'ignore' });
+  '--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--hide-scrollbars', ...(process.env.CHROME_ARGS ? process.env.CHROME_ARGS.split('|') : []), 'about:blank'], { stdio: 'ignore' });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let targets;
 for (let i = 0; i < 50; i++) { try { targets = await (await fetch('http://127.0.0.1:9333/json')).json(); break; } catch { await sleep(200); } }
@@ -18,7 +17,8 @@ const send = (method, params = {}) => new Promise((r) => { const i = ++id; pendi
 await send('Runtime.enable');
 await send('Network.enable');
 await send('Network.setCacheDisabled', { cacheDisabled: true });
-await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor: 1, mobile: false });
+await send('Emulation.setDeviceMetricsOverride', { width: +w, height: +h, deviceScaleFactor: +(process.env.DSF || 1), mobile: !!process.env.MOBILE });
+if (process.env.MOBILE) await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
 await send('Page.navigate', { url });
 await sleep(2500);
 let shotN = 0;

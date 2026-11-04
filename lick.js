@@ -358,8 +358,9 @@ export function createLick(ctx) {
   }
 
   /* ── 输入 ─────────────────────────────────────────────── */
-  function aimAt(x, y) {
+  function aimAt(x, y, finger) {
     const r = ctx.canvas.getBoundingClientRect();
+    if (finger) y -= 52; // 手指会盖住舌尖：触屏瞄准点比指尖高一点
     aim.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
   }
   function press() {

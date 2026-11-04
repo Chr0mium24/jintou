@@ -7,27 +7,38 @@
 <meta name="description" content="一张随手画的公路，走进去。">
 <link rel="icon" href="data:,">
 <style>
-  html, body { margin: 0; height: 100%; background: #fff; overflow: hidden; }
-  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+  html, body { margin: 0; height: 100%; background: #fff; overflow: hidden; overscroll-behavior: none; touch-action: none;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
   body.walking canvas { cursor: crosshair; }
   body.paper canvas { cursor: pointer; }
-  #paper { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; }
+  #paper { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   #grain {
     position: fixed; inset: 0; pointer-events: none; opacity: .07; mix-blend-mode: multiply;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
   .hint {
-    position: fixed; left: 0; right: 0; bottom: 2.6vh; padding-left: .4em;
+    position: fixed; left: 0; right: 0; bottom: calc(2.6vh + env(safe-area-inset-bottom)); padding-left: .4em;
     text-align: center; pointer-events: none; user-select: none;
     font: 300 12px/1.6 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif;
     letter-spacing: .4em; color: rgba(30, 32, 48, .5);
     opacity: 0; transition: opacity 1.2s ease, color 1.2s ease;
   }
   .hint.on { opacity: 1; }
-  @media (max-width: 560px) { .hint { letter-spacing: .15em; padding: 0 1em; } }
+  @media (max-width: 560px) { .hint { letter-spacing: .12em; padding: 0 1.2em; font-size: 11px; } }
+  body.touch .hint { bottom: calc(1.6vh + env(safe-area-inset-bottom)); }
+  /* 摇杆：浮动，按在哪儿圆心就在哪儿；空闲时左下角有个淡淡的提示环 */
+  #stick { position: fixed; width: 112px; height: 112px; margin: -56px 0 0 -56px; border-radius: 50%; pointer-events: none;
+    border: 1.5px solid rgba(255,255,255,.4); background: rgba(255,255,255,.07); display: none; }
+  #stick.on { display: block; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; border-radius: 50%;
+    background: rgba(255,255,255,.5); transform: translate(-50%, -50%); }
+  #stickhint { position: fixed; left: calc(34px + env(safe-area-inset-left)); bottom: calc(46px + env(safe-area-inset-bottom)); width: 84px; height: 84px; border-radius: 50%;
+    border: 1.5px dashed rgba(255,255,255,.3); pointer-events: none; display: none; }
+  body.touch.walking #stickhint { display: block; }
   body.walking .hint { color: rgba(255, 255, 255, .62); }
   .meter {
-    position: fixed; left: 16px; top: 13px; pointer-events: none; user-select: none;
+    position: fixed; left: max(16px, env(safe-area-inset-left)); top: calc(13px + env(safe-area-inset-top)); pointer-events: none; user-select: none;
     font: 300 13px/1 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif;
     letter-spacing: .3em; color: rgba(255, 255, 255, .72);
     opacity: 0; transition: opacity .8s ease;
@@ -35,7 +46,7 @@
   .meter.on { opacity: 1; }
   #flash { position: fixed; inset: 0; background: #fffdf2; opacity: 0; pointer-events: none; }
   .back {
-    position: fixed; right: 14px; top: 12px; padding: 8px 10px;
+    position: fixed; right: max(10px, env(safe-area-inset-right)); top: calc(6px + env(safe-area-inset-top)); padding: 14px 12px;
     background: none; border: 0; cursor: pointer;
     font: 300 12px/1 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", system-ui, sans-serif;
     letter-spacing: .3em; color: rgba(255, 255, 255, .45);
@@ -88,10 +99,12 @@
 </svg>
 <div id="grain"></div>
 <div id="flash"></div>
+<div id="stickhint"></div>
+<div id="stick"><div id="knob"></div></div>
 <div class="hint" id="hint"></div>
 <div class="meter" id="meter"></div>
 <button class="back" id="back" type="button">回到画里 R</button>
 <noscript><div class="hint on">需要 JavaScript 和 WebGL</div></noscript>
-<script type="module" src="main.js?v=1"></script>
+<script type="module" src="main.js?v=2"></script>
 </body>
 </html>

@@ -3,8 +3,8 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
-import { createLick } from './lick.js?v=1';
-import { createIdol } from './idol.js?v=1';
+import { createLick } from './lick.js?v=2';
+import { createIdol } from './idol.js?v=2';
 
 const qs = new URLSearchParams(location.search);
 const $ = (s) => document.querySelector(s);
@@ -61,8 +61,11 @@ const smooth = (t) => t * t * (3 - 2 * t);
 
 /* ── 渲染器 ─────────────────────────────────────────────── */
 const canvas = $('#c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-const DPR = Math.min(devicePixelRatio || 1, 2);
+const COARSE = matchMedia('(pointer: coarse)').matches;
+// 2 倍屏上多重采样是浪费：像素已经够密；动态分辨率会在卡的时候继续往下降
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: (devicePixelRatio || 1) < 2, powerPreference: 'high-performance' });
+const DPR_MAX = Math.min(devicePixelRatio || 1, COARSE ? 1.5 : 2);
+let DPR = DPR_MAX;
 renderer.setPixelRatio(DPR);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(PAL.sky);
@@ -194,7 +197,7 @@ const MirrorShader = {
     }`,
 };
 const mirror = new Reflector(new THREE.CircleGeometry(R, 180), {
-  color: PAL.ground, textureWidth: 1024, textureHeight: 1024, clipBias: 0.002, multisample: 4, shader: MirrorShader,
+  color: PAL.ground, textureWidth: 512, textureHeight: 512, clipBias: 0.002, multisample: 0, shader: MirrorShader,
 });
 mirror.rotation.x = -Math.PI / 2;
 mirror.renderOrder = -10;
@@ -874,11 +877,13 @@ function layout() {
   const pad = 24;
   S = Math.min((W / 2) / (VP.x + pad), (W / 2) / (IMG.w - VP.x + pad), (H / 2) / (VP.y + pad), (H / 2) / (IMG.h - VP.y + pad));
   paperFov = 2 * Math.atan((H / 2) / (S * F)) * 180 / Math.PI;
-  worldFov = Math.min(paperFov, 72);
+  // 竖屏：保证水平视野不少于约 75°，免得手机上像隔着门缝看
+  worldFov = W >= H ? Math.min(paperFov, 72) : Math.min(100, Math.max(72, 2 * Math.atan(Math.tan(37.5 * Math.PI / 180) * H / W) * 180 / Math.PI));
   renderer.setSize(W, H, false);
   camera.aspect = W / H;
   U.px.value = H * DPR * 0.5;
-  mirror.getRenderTarget().setSize(Math.round(W * DPR * 0.6), Math.round(H * DPR * 0.6));
+  renderer.setPixelRatio(DPR);
+  mirror.getRenderTarget().setSize(Math.round(W * DPR * 0.5), Math.round(H * DPR * 0.5));
   for (const k of inks) {
     if (k.points) k.m.size = k.px * S * DPR;
     else k.m.linewidth = k.px * S * DPR;
@@ -924,7 +929,8 @@ function tween(key, to, dur, delay = 0, fn = ease.inOut, done) {
 }
 
 const hint = $('#hint');
-const touch = matchMedia('(pointer: coarse)').matches;
+const touch = COARSE;
+if (touch) { document.body.classList.add('touch'); $('#back').textContent = '回到画里'; }
 let hintTimer = 0;
 function say(text, hold = 0) {
   hint.textContent = text;
@@ -944,12 +950,12 @@ function enter() {
   tween('roll', 0, 1.8, 1.7);
   tween('fovK', 1, 1.8, 1.7);
   tween('dream', 1, 9, 2.2, (t) => t);
-  say(touch ? '单指 伸舌头 · 双指拖 环顾 · 双指按住 前进' : '左键按住 伸舌头 · 右键或 Alt+拖 环顾 · WASD 走 · R 回到画里', 9000);
+  say(touch ? '左下摇杆 走 · 单指按住 伸舌头 · 双指拖 环顾' : '左键按住 伸舌头 · 右键或 Alt+拖 环顾 · WASD 走 · R 回到画里', 9000);
 }
 function back() {
   if (mode !== 'world') return;
   mode = 'returning';
-  vel.set(0, 0, 0); wheelV = 0; vy = 0; look = null;
+  vel.set(0, 0, 0); wheelV = 0; vy = 0; look = null; stick = null; stickEl.classList.remove('on'); touches.clear();
   lick.forceRetract(); lick.restore(); idol.reset();
   view.yaw = Math.atan2(Math.sin(view.yaw), Math.cos(view.yaw));
   // 先飞回画纸后面 7 米、摆回画里的角度，再顺着原路从洞里退出去
@@ -992,6 +998,8 @@ addEventListener('blur', () => keys.clear());
 // 左键按住：伸舌头，舌尖跟着鼠标；右键（或 Alt+左键）拖：环顾。触屏：单指舌头，双指拖环顾、双指按住前进
 let look = null;
 const touches = new Map();
+let stick = null;
+const stickEl = $('#stick'), knobEl = $('#knob');
 const centroid = () => {
   let x = 0, y = 0;
   for (const p of touches.values()) { x += p.x; y += p.y; }
@@ -1008,9 +1016,16 @@ canvas.addEventListener('pointerdown', (e) => {
   if (mode !== 'world') return;
   canvas.setPointerCapture(e.pointerId);
   if (e.pointerType === 'touch') {
+    // 左下角先按下的那根手指是摇杆（浮动的，按在哪儿哪儿就是圆心）
+    if (!stick && e.clientX < W * 0.46 && e.clientY > H * 0.42) {
+      stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: 0, y: 0 };
+      stickEl.style.left = e.clientX + 'px'; stickEl.style.top = e.clientY + 'px';
+      stickEl.classList.add('on'); knobEl.style.transform = 'translate(-50%,-50%)';
+      return;
+    }
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    if (touches.size === 1) { lick.aimAt(e.clientX, e.clientY); lick.press(); }
-    else { lick.release(); look = { touch: true, ...centroid(), t: clock, moved: 0 }; }
+    if (touches.size === 1) { lick.aimAt(e.clientX, e.clientY, true); lick.press(); }
+    else { lick.release(); look = { touch: true, ...centroid() }; }
     return;
   }
   if (e.button === 2 || (e.button === 0 && e.altKey)) { look = { id: e.pointerId, x: e.clientX, y: e.clientY }; return; }
@@ -1018,13 +1033,19 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 canvas.addEventListener('pointermove', (e) => {
   if (e.pointerType === 'touch') {
+    if (stick && stick.id === e.pointerId) {
+      const R = 56, dx = e.clientX - stick.ox, dy = e.clientY - stick.oy, d = Math.hypot(dx, dy) || 1, k = Math.min(1, d / R);
+      stick.x = dx / d * k; stick.y = dy / d * k;
+      knobEl.style.transform = `translate(calc(-50% + ${stick.x * R}px), calc(-50% + ${stick.y * R}px))`;
+      return;
+    }
     if (!touches.has(e.pointerId)) return;
     touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (touches.size >= 2 && look?.touch) {
       const c = centroid(), dx = c.x - look.x, dy = c.y - look.y;
-      look.x = c.x; look.y = c.y; look.moved += Math.abs(dx) + Math.abs(dy);
+      look.x = c.x; look.y = c.y;
       turn(dx, dy);
-    } else if (touches.size === 1) lick.aimAt(e.clientX, e.clientY);
+    } else if (touches.size === 1) lick.aimAt(e.clientX, e.clientY, true);
     return;
   }
   lick.aimAt(e.clientX, e.clientY);
@@ -1035,6 +1056,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 const release = (e) => {
   if (e.pointerType === 'touch') {
+    if (stick && stick.id === e.pointerId) { stick = null; stickEl.classList.remove('on'); return; }
     touches.delete(e.pointerId);
     if (touches.size < 2 && look?.touch) look = null;
     if (!touches.size) lick.release();
@@ -1068,8 +1090,11 @@ function walk(dt) {
   if (keys.has('d')) side += 1;
   if (keys.has('arrowleft')) view.yaw += 1.5 * dt;
   if (keys.has('arrowright')) view.yaw -= 1.5 * dt;
-  if (look?.touch && look.moved < 10 && clock - look.t > 0.3) fwd = 1;
-  const speed = keys.has('shift') ? 24 : 4.5;
+  let speed = keys.has('shift') ? 24 : 4.5;
+  if (stick) { // 摇杆：往上推前进，推到底是小跑
+    const m = Math.hypot(stick.x, stick.y);
+    if (m > 0.12) { fwd -= stick.y; side += stick.x; speed *= 1 + 1.2 * clamp01((m - 0.85) / 0.15); }
+  }
   const sy = Math.sin(view.yaw), cy = Math.cos(view.yaw);
   want.set(-sy * fwd + cy * side, 0, -cy * fwd - sy * side);
   if (want.lengthSq() > 1) want.normalize();
@@ -1203,6 +1228,7 @@ function update(dt) {
   pg.style.display = showPaper ? '' : 'none';
   if (showPaper) pg.setAttribute('transform', `translate(${W / 2} ${H / 2}) scale(${S * DS / (DS - dz)}) translate(${-VP.x} ${-VP.y})`);
   blockSide.opacity = 0.62 * clamp01(dz / 7); // 画里只看得到正面，走出来才有厚度
+  paper.visible = dz < 90 || mode === 'paper' || mode === 'entering'; // 走远了那张纸只剩一个小点，不再画它的五万个三角形
 
   fx.shake *= Math.exp(-dt * 2.2);
   fx.flash = Math.max(0, fx.flash - dt * 2.2);
@@ -1224,8 +1250,20 @@ function update(dt) {
 }
 
 let last = performance.now();
+// 动态分辨率：持续偏慢就降像素比，持续有余量再慢慢升回来
+let slowN = 0, fastN = 0, adaptCool = 2, ema = 16.7;
+function adapt(ms) {
+  ema += (ms - ema) * 0.1;
+  adaptCool -= ms / 1000;
+  if (adaptCool > 0 || mode === 'paper') return;
+  slowN = ema > 21 ? slowN + 1 : 0;
+  fastN = ema < 13 ? fastN + 1 : 0;
+  if (slowN > 20 && DPR > 0.75) { DPR = Math.max(0.75, DPR - (DPR > 1.2 ? 0.25 : 0.15)); layout(); adaptCool = 1.5; slowN = 0; }
+  else if (fastN > 240 && DPR < DPR_MAX) { DPR = Math.min(DPR_MAX, DPR + 0.15); layout(); adaptCool = 4; fastN = 0; }
+}
 function frame(now) {
   requestAnimationFrame(frame); // 先排下一帧：哪帧出错也不至于整个停住
+  if (now - last < 250) adapt(now - last); // 切走标签页回来的那一大帧不算
   update(Math.min(0.05, (now - last) / 1000));
   last = now;
   renderer.render(scene, camera);
